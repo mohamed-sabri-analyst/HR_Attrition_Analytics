@@ -1,0 +1,518 @@
+// =========================================================
+// HR Workforce & Attrition Analytics Platform
+// Full DAX measure library — extracted directly from HR.pbix
+// 121 measures across 2 tables
+// Author: Mohamed Sabri Al-Deip
+// =========================================================
+
+
+// ---------------------------------------------------------
+// TABLE: Fact_Attrition  (2 measures)
+// ---------------------------------------------------------
+
+Employee Count =
+COUNTROWS(Dim_Employee)
+
+Avg Salary =
+AVERAGE(Dim_Employee[BaseMonthlySalary])
+
+
+// ---------------------------------------------------------
+// TABLE: _Measures  (119 measures)
+// ---------------------------------------------------------
+
+Total Headcount (Active) =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Total Employees Ever =
+DISTINCTCOUNT(Dim_Employee[EmployeeKey])
+
+Current Active Employees =
+CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]), Dim_Employee[IsActive] = TRUE)
+
+Total Exits (All Time) =
+DISTINCTCOUNT(Fact_Attrition[EmployeeKey])
+
+Headcount by Department =
+CALCULATE([Total Headcount (Active)], ALLEXCEPT(Fact_EmployeeMonthly, Fact_EmployeeMonthly[DepartmentKey]))
+
+Headcount Growth (MoM) =
+VAR CurrMonth = [Total Headcount (Active)]
+VAR PrevMonth = CALCULATE([Total Headcount (Active)],
+    DATEADD(Dim_Date[MonthStartDate], -1, MONTH))
+RETURN CurrMonth - PrevMonth
+
+Net Headcount Change YTD =
+VAR NewHires = 
+    CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]),
+        Dim_Employee[HireDate] >= DATE(YEAR(TODAY()),1,1))
+VAR Exits = 
+    CALCULATE(DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+        USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey]),
+        Fact_Attrition[ExitMonthKey] >= VALUE(FORMAT(DATE(YEAR(TODAY()),1,1),"YYYYMM")))
+RETURN 
+    NewHires - Exits
+
+Average Tenure (Months, Active) =
+CALCULATE(AVERAGE(Fact_EmployeeMonthly[TenureMonths]),
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Average Tenure at Exit (Months) =
+AVERAGE(Fact_Attrition[TenureAtExitMonths])
+
+Headcount % by Department =
+DIVIDE([Total Headcount (Active)], CALCULATE([Total Headcount (Active)], ALL(Dim_Department)))
+
+Male Headcount =
+CALCULATE([Total Headcount (Active)], Dim_Employee[Gender] = "Male")
+
+Gender Ratio (Female %) =
+DIVIDE([Female Headcount], [Male Headcount] + [Female Headcount])
+
+Headcount per Manager Level =
+CALCULATE([Total Headcount (Active)], Dim_JobRole[JobLevel] = "Manager")
+
+Average Age (Active Workforce) =
+CALCULATE(AVERAGE(Dim_Employee[Age]), Dim_Employee[IsActive] = TRUE)
+
+Total Attrition Events =
+CALCULATE(
+    DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey])
+)
+
+Monthly Turnover Rate % =
+VAR ExitsThisMonth = CALCULATE(DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    Fact_Attrition[ExitMonthKey] = MAX(Dim_Date[MonthKey]))
+VAR AvgHeadcount = [Total Headcount (Active)]
+RETURN DIVIDE(ExitsThisMonth, AvgHeadcount)
+
+Annualized Turnover Rate % =
+[Monthly Turnover Rate %] * 12
+
+Voluntary Attrition Count =
+CALCULATE(
+    DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    Fact_Attrition[IsVoluntary] = TRUE,
+    USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey])
+)
+
+Involuntary Attrition Count =
+CALCULATE(
+    DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey]),
+    Fact_Attrition[IsVoluntary] = FALSE
+)
+
+Voluntary Attrition Rate % =
+DIVIDE([Voluntary Attrition Count], [Total Attrition Events])
+
+Early Attrition Count (Within 6 Months) =
+CALCULATE(
+    DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey]),
+    Fact_Attrition[TenureAtExitMonths] <= 6
+)
+
+Early Attrition Rate % =
+DIVIDE([Early Attrition Count (Within 6 Months)], [Total Attrition Events])
+
+Attrition by Department Rank =
+RANKX(ALL(Dim_Department), [Total Attrition Events], , DESC)
+
+Attrition Rate by Department =
+DIVIDE([Total Attrition Events],
+    CALCULATE([Total Employees Ever], ALLEXCEPT(Dim_Employee, Dim_Employee[DepartmentKey])))
+
+Top Exit Reason =
+CALCULATE(
+    SELECTEDVALUE(Fact_Attrition[ExitReason]),
+    TOPN(1, ALL(Fact_Attrition[ExitReason]), CALCULATE(COUNTROWS(Fact_Attrition)), DESC)
+)
+
+Regretted Attrition Count =
+-- High performers (rating >= 4) who left voluntarily = "regretted" loss
+CALCULATE(DISTINCTCOUNT(Fact_Attrition[EmployeeKey]),
+    Fact_Attrition[IsVoluntary] = TRUE, Fact_Attrition[LastPerformanceRating] >= 4)
+
+Regretted Attrition % =
+CALCULATE(
+    DIVIDE([Regretted Attrition Count], [Voluntary Attrition Count]),
+    USERELATIONSHIP(Fact_Attrition[ExitMonthKey], Dim_Date[MonthKey])
+)
+
+Attrition Trend YoY =
+VAR CurrYear = [Total Attrition Events]
+VAR PrevYear = CALCULATE([Total Attrition Events], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+RETURN DIVIDE(CurrYear - PrevYear, PrevYear)
+
+Exits This Quarter =
+CALCULATE([Total Attrition Events],
+    DATESQTD(Dim_Date[MonthStartDate]))
+
+Retention Rate % =
+1 - [Annualized Turnover Rate %]
+
+Average Monthly Exits =
+AVERAGEX(VALUES(Dim_Date[MonthKey]),
+    CALCULATE(DISTINCTCOUNT(Fact_Attrition[EmployeeKey])))
+
+Average Risk Score =
+CALCULATE(
+    AVERAGE(Fact_AttritionRisk[AttritionRiskScore]),
+    USERELATIONSHIP(Fact_AttritionRisk[MonthKey], Dim_Date[MonthKey])
+)
+
+High Risk Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]), Fact_AttritionRisk[RiskTier] = "High")
+
+Medium Risk Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]), Fact_AttritionRisk[RiskTier] = "Medium")
+
+Low Risk Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]), Fact_AttritionRisk[RiskTier] = "Low")
+
+% Workforce at High Risk =
+DIVIDE([High Risk Headcount], DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]))
+
+High Risk Headcount by Department =
+CALCULATE([High Risk Headcount], ALLEXCEPT(Dim_Employee, Dim_Employee[DepartmentKey]))
+
+Replacement Risk Cost =
+VAR TotalCost = 
+    SUMX(
+        Fact_AttritionRisk, 
+        RELATED(Dim_Employee[BaseMonthlySalary]) * 12 * 0.5
+    )
+RETURN 
+    IF(ISBLANK(TotalCost), 0, TotalCost)
+
+Average Risk Score by Department =
+CALCULATE([Average Risk Score], ALLEXCEPT(Dim_Employee, Dim_Employee[DepartmentKey]))
+
+Risk Score Rank (Employee) =
+RANKX(ALL(Fact_AttritionRisk[EmployeeKey]), [Average Risk Score], , DESC)
+
+High Risk Managers Count =
+CALCULATE([High Risk Headcount], Dim_JobRole[JobLevel] = "Manager")
+
+High Risk High Performers =
+-- flight-risk top talent: high risk + strong last performance rating
+CALCULATE(
+    DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]),
+    Fact_AttritionRisk[RiskTier] = "High"
+)
+
+Risk Tier Distribution % =
+DIVIDE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]),
+    CALCULATE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]), ALL(Fact_AttritionRisk[RiskTier])))
+
+Watchlist Count (Risk > 0.5) =
+CALCULATE(DISTINCTCOUNT(Fact_AttritionRisk[EmployeeKey]), Fact_AttritionRisk[AttritionRiskScore] > 0.5)
+
+Average Satisfaction Score =
+AVERAGE(Fact_EmployeeMonthly[SatisfactionScore])
+
+Average Performance Rating =
+AVERAGE(Fact_EmployeeMonthly[PerformanceRating])
+
+Current Month Avg Satisfaction =
+CALCULATE([Average Satisfaction Score], Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Satisfaction Trend (3-Month Rolling) =
+CALCULATE([Average Satisfaction Score],
+    DATESINPERIOD(Dim_Date[MonthStartDate], MAX(Dim_Date[MonthStartDate]), -3, MONTH))
+
+Low Satisfaction Headcount (<2.5) =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[SatisfactionScore] < 2.5,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+High Performers Count Rate 4.5 =
+VAR MaxMonth = MAX(Fact_EmployeeMonthly[MonthKey])
+RETURN
+CALCULATE(
+    DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[PerformanceRating] >= 4.5,
+    Fact_EmployeeMonthly[MonthKey] = MaxMonth
+)
+
+Low Performers Count (Rating < 2.5) =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[PerformanceRating] < 2.5,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Performance-Satisfaction Correlation Segment =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[PerformanceRating] >= 4, Fact_EmployeeMonthly[SatisfactionScore] < 3,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Promotions This Year =
+CALCULATE(SUM(Fact_EmployeeMonthly[PromotedThisMonth]), YEAR(Dim_Date[MonthStartDate]) = YEAR(TODAY()))
+
+Promotion Rate % =
+DIVIDE([Promotions This Year], [Total Headcount (Active)])
+
+Average Months Since Last Promotion =
+AVERAGEX(VALUES(Fact_EmployeeMonthly[EmployeeKey]), MAX(Fact_EmployeeMonthly[TenureMonths]))
+
+Satisfaction by Department =
+CALCULATE([Average Satisfaction Score], ALLEXCEPT(Fact_EmployeeMonthly, Fact_EmployeeMonthly[DepartmentKey]))
+
+Performance by Job Level =
+CALCULATE([Average Performance Rating], ALLEXCEPT(Dim_JobRole, Dim_JobRole[JobLevel]))
+
+Engagement Health Index =
+-- blended index: normalized satisfaction + inverse absence, scaled 0-100
+VAR SatNorm = DIVIDE([Average Satisfaction Score], 5) * 70
+VAR AbsPenalty = MIN(AVERAGE(Fact_EmployeeMonthly[AbsenceDays]) * 5, 30)
+RETURN SatNorm + (30 - AbsPenalty)
+
+Average Monthly Salary =
+AVERAGE(Fact_EmployeeMonthly[MonthlySalary])
+
+Total Monthly Payroll =
+CALCULATE(SUM(Fact_EmployeeMonthly[MonthlySalary]), Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Average Salary by Department =
+CALCULATE([Average Monthly Salary], ALLEXCEPT(Fact_EmployeeMonthly, Fact_EmployeeMonthly[DepartmentKey]))
+
+Average Salary by Job Level =
+CALCULATE([Average Monthly Salary], ALLEXCEPT(Dim_JobRole, Dim_JobRole[JobLevel]))
+
+Gender Pay Gap % =
+VAR MaleAvg = CALCULATE([Average Monthly Salary], Dim_Employee[Gender] = "Male")
+VAR FemaleAvg = CALCULATE([Average Monthly Salary], Dim_Employee[Gender] = "Female")
+RETURN DIVIDE(MaleAvg - FemaleAvg, MaleAvg)
+
+Salary Range Penetration % =
+VAR CurrentRole = SELECTEDVALUE(Dim_JobRole[JobRoleName])
+RETURN
+AVERAGEX(
+    FILTER(
+        Dim_Employee,
+        RELATED(Dim_JobRole[JobRoleName]) = CurrentRole
+    ),
+    DIVIDE(
+        Dim_Employee[BaseMonthlySalary] - RELATED(Dim_JobRole[MinSalary]),
+        RELATED(Dim_JobRole[MaxSalary]) - RELATED(Dim_JobRole[MinSalary])
+    )
+)
+
+Underpaid Headcount (Below 25% of Band) =
+CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]),
+    FILTER(Dim_Employee,
+        DIVIDE(Dim_Employee[BaseMonthlySalary] - RELATED(Dim_JobRole[MinSalary]),
+            RELATED(Dim_JobRole[MaxSalary]) - RELATED(Dim_JobRole[MinSalary])) < 0.25))
+
+Compa-Ratio (Average) =
+AVERAGEX(
+    Dim_Employee,
+    DIVIDE(
+        Dim_Employee[BaseMonthlySalary],
+        (RELATED(Dim_JobRole[MinSalary]) + RELATED(Dim_JobRole[MaxSalary])) / 2
+    )
+)
+
+Total Annualized Payroll Cost =
+[Total Monthly Payroll] * 12
+
+Average Salary Growth YoY % =
+VAR CurrAvg = [Average Monthly Salary]
+VAR PrevAvg = CALCULATE([Average Monthly Salary], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+RETURN DIVIDE(CurrAvg - PrevAvg, PrevAvg)
+
+Payroll Cost per Department Share % =
+DIVIDE([Total Monthly Payroll], CALCULATE([Total Monthly Payroll], ALL(Dim_Department)))
+
+Median Monthly Salary =
+MEDIAN(Fact_EmployeeMonthly[MonthlySalary])
+
+Average Absence Days =
+AVERAGE(Fact_EmployeeMonthly[AbsenceDays])
+
+Total Absence Days (This Month) =
+CALCULATE(SUM(Fact_EmployeeMonthly[AbsenceDays]), Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Average Overtime Hours =
+AVERAGE(Fact_EmployeeMonthly[OvertimeHours])
+
+High Overtime Headcount (>15h) =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[OvertimeHours] > 15,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Overtime Trend (Rolling 3-Month) =
+CALCULATE([Average Overtime Hours],
+    DATESINPERIOD(Dim_Date[MonthStartDate], MAX(Dim_Date[MonthStartDate]), -3, MONTH))
+
+Absenteeism Rate % =
+DIVIDE([Total Absence Days (This Month)], [Total Headcount (Active)] * 22)
+
+Overtime by Department =
+CALCULATE([Average Overtime Hours], ALLEXCEPT(Fact_EmployeeMonthly, Fact_EmployeeMonthly[DepartmentKey]))
+
+High Absence Risk Headcount (>3 Days) =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[AbsenceDays] > 3,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Overtime Cost Estimate =
+-- approx: overtime hours * hourly-equivalent rate (monthly salary / 176 hours) * 1.5
+SUMX(
+    FILTER(Fact_EmployeeMonthly, Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey])),
+    Fact_EmployeeMonthly[OvertimeHours] * DIVIDE(Fact_EmployeeMonthly[MonthlySalary], 176) * 1.5
+)
+
+Attendance Health Score =
+100 - ([Absenteeism Rate %] * 100)
+
+New Hires (This Year) =
+CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]),
+    YEAR(Dim_Employee[HireDate]) = YEAR(TODAY()))
+
+New Hires (Last 12 Months) =
+CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]),
+    Dim_Employee[HireDate] >= EDATE(TODAY(), -12))
+
+Average Time to Promotion (Months) =
+AVERAGE(Fact_EmployeeMonthly[TenureMonths])
+
+Tenure Under 1 Year Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[TenureMonths] <= 12,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Tenure 1-3 Years Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[TenureMonths] > 12 && Fact_EmployeeMonthly[TenureMonths] <= 36,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Tenure 3+ Years Headcount =
+CALCULATE(DISTINCTCOUNT(Fact_EmployeeMonthly[EmployeeKey]),
+    Fact_EmployeeMonthly[TenureMonths] > 36,
+    Fact_EmployeeMonthly[MonthKey] = MAX(Fact_EmployeeMonthly[MonthKey]))
+
+Hiring Growth Rate % =
+VAR CurrYearHires = [New Hires (This Year)]
+VAR PrevYearHires = CALCULATE([New Hires (This Year)], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+RETURN DIVIDE(CurrYearHires - PrevYearHires, PrevYearHires)
+
+Offer to Active Ratio =
+-- placeholder ratio assuming recruitment funnel data if added later
+DIVIDE([New Hires (This Year)], [New Hires (This Year)])
+
+Department Growth Rate YoY % =
+VAR Curr = CALCULATE([Total Headcount (Active)])
+VAR Prev = CALCULATE([Total Headcount (Active)], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+RETURN DIVIDE(Curr - Prev, Prev)
+
+Average Tenure by Job Level =
+CALCULATE([Average Tenure (Months, Active)], ALLEXCEPT(Dim_JobRole, Dim_JobRole[JobLevel]))
+
+Nationality Diversity Count =
+DISTINCTCOUNT(Dim_Employee[Nationality])
+
+Headcount by Nationality =
+CALCULATE([Total Headcount (Active)], ALLEXCEPT(Dim_Employee, Dim_Employee[Nationality]))
+
+Qatari Workforce % (Nationalization) =
+DIVIDE(CALCULATE([Total Headcount (Active)], Dim_Employee[Nationality] = "Qatari"), [Total Headcount (Active)])
+
+Female Representation in Management % =
+DIVIDE(
+    CALCULATE([Total Headcount (Active)], Dim_Employee[Gender] = "Female", Dim_JobRole[JobLevel] = "Manager"),
+    CALCULATE([Total Headcount (Active)], Dim_JobRole[JobLevel] = "Manager")
+)
+
+Average Age by Department =
+CALCULATE([Average Age (Active Workforce)], ALLEXCEPT(Fact_EmployeeMonthly, Fact_EmployeeMonthly[DepartmentKey]))
+
+Education Level Distribution % =
+DIVIDE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]),
+    CALCULATE(DISTINCTCOUNT(Dim_Employee[EmployeeKey]), ALL(Dim_Employee[EducationLevel])))
+
+Married Employees % =
+DIVIDE(CALCULATE([Total Headcount (Active)], Dim_Employee[MaritalStatus] = "Married"), [Total Headcount (Active)])
+
+Office Headcount Share % =
+DIVIDE([Total Headcount (Active)], CALCULATE([Total Headcount (Active)], ALL(Dim_Office)))
+
+Headcount PY (Prior Year) =
+CALCULATE([Total Headcount (Active)], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+
+Headcount YoY Growth % =
+DIVIDE([Total Headcount (Active)] - [Headcount PY (Prior Year)], [Headcount PY (Prior Year)])
+
+Turnover PY (Prior Year) =
+CALCULATE([Annualized Turnover Rate %], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+
+Turnover YoY Change (pts) =
+[Annualized Turnover Rate %] - [Turnover PY (Prior Year)]
+
+Attrition MTD =
+TOTALMTD([Total Attrition Events], Dim_Date[MonthStartDate])
+
+Attrition QTD =
+TOTALQTD([Total Attrition Events], Dim_Date[MonthStartDate])
+
+Attrition YTD =
+TOTALYTD([Total Attrition Events], Dim_Date[MonthStartDate])
+
+Rolling 12-Month Attrition =
+CALCULATE([Total Attrition Events],
+    DATESINPERIOD(Dim_Date[MonthStartDate], MAX(Dim_Date[MonthStartDate]), -12, MONTH))
+
+Rolling 12-Month Turnover Rate % =
+DIVIDE([Rolling 12-Month Attrition], [Total Headcount (Active)])
+
+Average Satisfaction PY =
+CALCULATE([Average Satisfaction Score], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+
+Satisfaction YoY Change =
+[Average Satisfaction Score] - [Average Satisfaction PY]
+
+Payroll Cost YoY Growth % =
+VAR Curr = [Total Monthly Payroll]
+VAR Prev = CALCULATE([Total Monthly Payroll], SAMEPERIODLASTYEAR(Dim_Date[MonthStartDate]))
+RETURN DIVIDE(Curr - Prev, Prev)
+
+KPI Turnover Target % =
+0.12
+
+Turnover vs Target =
+[Annualized Turnover Rate %] - [KPI Turnover Target %]
+
+KPI Status Icon (Turnover) =
+SWITCH(TRUE(),
+    [Annualized Turnover Rate %] <= [KPI Turnover Target %], "🟢",
+    [Annualized Turnover Rate %] <= [KPI Turnover Target %] * 1.25, "🟡",
+    "🔴"
+)
+
+KPI Satisfaction Target =
+3.8
+
+Satisfaction vs Target =
+[Average Satisfaction Score] - [KPI Satisfaction Target]
+
+Workforce Health Score =
+-- blended executive index 0-100
+VAR TurnoverScore = (1 - MIN(DIVIDE([Annualized Turnover Rate %], 0.25), 1)) * 40
+VAR SatScore = MIN(DIVIDE([Average Satisfaction Score], 5), 1) * 30
+VAR RiskScore = (1 - MIN(DIVIDE([% Workforce at High Risk], 0.3), 1)) * 30
+RETURN TurnoverScore + SatScore + RiskScore
+
+Total Measures Count Check =
+1
+
+Executive Alert Count =
+-- number of departments currently exceeding the turnover target
+COUNTROWS(
+    FILTER(VALUES(Dim_Department[DepartmentKey]),
+        CALCULATE([Annualized Turnover Rate %]) > [KPI Turnover Target %])
+)
+
+Female Headcount =
+CALCULATE([Total Headcount (Active)], Dim_Employee[Gender] = "Female")
