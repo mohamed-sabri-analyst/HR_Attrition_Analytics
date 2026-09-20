@@ -61,7 +61,7 @@ A Python-trained classification model scores every active employee on attrition 
 
 ## 🧬 Under the Hood — The Actual DAX
 
-📄 **Full measure library (121 measures, organized by category):** [dax-measures/key-measures.md](dax-measures/key-measures.md)
+📄 **Full measure library (121 measures, organized by category):** [HR_key-measures.md](HR_key-measures.md)
 
 A few signature ones below.
 
@@ -115,3 +115,4 @@ Power BI · DAX · Power Query · Python (pandas, NumPy, scikit-learn) · SQL ·
 
 **Mohamed Sabri Al-Deip** — MIS Analyst | Data Analyst | Power BI Developer
 📧 m_sabry91@hotmail.com &nbsp;|&nbsp; 🔗 [LinkedIn](https://www.linkedin.com/in/mohamed-sabri-aldeip) &nbsp;|&nbsp; 🌐 [Portfolio](https://mohamed-sabri-analyst.github.io)
+
