@@ -65,7 +65,7 @@ A Python-trained classification model scores every active employee on attrition 
 
 A few signature ones below.
 
-These are the real, unedited measures from the `.pbix` file.
+These are the real, unedited measures exported directly from the project's Power BI data model.
 
 **Replacement cost exposure** (turns raw risk scores into a dollar-value business case):
 ```dax
@@ -115,4 +115,3 @@ Power BI · DAX · Power Query · Python (pandas, NumPy, scikit-learn) · SQL ·
 
 **Mohamed Sabri Al-Deip** — MIS Analyst | Data Analyst | Power BI Developer
 📧 m_sabry91@hotmail.com &nbsp;|&nbsp; 🔗 [LinkedIn](https://www.linkedin.com/in/mohamed-sabri-aldeip) &nbsp;|&nbsp; 🌐 [Portfolio](https://mohamed-sabri-analyst.github.io)
-
